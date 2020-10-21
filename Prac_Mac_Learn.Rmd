@@ -1,0 +1,145 @@
+---
+title: "Practical Machine Learning"
+author: "Yash Garse"
+output:
+  md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 1.A Brief Overview
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively.  One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.  
+In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.  
+The goal of this  project is to predict the manner in which they did the exercise.
+
+### 2.Loading the Data
+
+```{r warning=FALSE}
+suppressPackageStartupMessages(library(rpart))
+suppressPackageStartupMessages(library(rpart.plot))
+suppressPackageStartupMessages(library(caret))
+suppressPackageStartupMessages(library(rattle))
+suppressPackageStartupMessages(library(randomForest))
+```
+
+```{r cache=TRUE}
+training_data<-read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"),header=TRUE,na.strings = "")
+testing_data<-read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"),header=TRUE,na.strings = "")
+```
+
+### 3.Processing Data
+
+We will split the training data into 2 parts i.e 75% training data and 25% test data.
+
+```{r}
+partition<- createDataPartition(training_data$classe, p=0.75, list=FALSE)
+training_new <- training_data[partition,]
+testing_new <- training_data[-partition,]
+```
+
+```{r}
+dim(training_new)
+dim(testing_new)
+```
+Both the training and testing data has 160 columns.
+```{r}
+str(training_data,list.len=50)
+```
+
+The first seven variables are basically timestamps and ids which will just create noise in our prediction analysis so we will remove them.
+
+```{r cache=TRUE}
+training_new<-training_new[,-c(1:7)]
+```
+
+Next we will remove any columns which has variance near 0 i.e there is no spread in the data.Such variables will not help in our analysis
+
+```{r}
+training_zero_var<-nearZeroVar(training_new)
+training_new<-training_new[,-training_zero_var]
+```
+
+From the above result of str() on training data,we can observe that there are a lot of variables which have most of their rows filled with Na.We will remove such columns
+
+```{r}
+logical_na<-sapply(training_new,function(x){sum(is.na(x))>0.6*nrow(training_new)})
+training_new<-training_new[,!logical_na]
+```
+
+```{r}
+dim(training_new)
+```
+Now that we have cleaned the training dataset lets do the same with both the downloaded and our own created testing datasets.
+
+```{r}
+testing_new<-testing_new[,-c(1:7)]
+testing_zero_var<-nearZeroVar(testing_new)
+testing_new<-testing_new[,-testing_zero_var]
+logical_na<-sapply(testing_new,function(x){sum(is.na(x))>0.6*nrow(testing_new)})
+testing_new<-testing_new[,!logical_na]
+```
+
+```{r}
+testing_data<-testing_data[,-c(1:7)]
+testing_zero_var<-nearZeroVar(testing_data)
+testing_data<-testing_data[,-testing_zero_var]
+logical_na<-sapply(testing_data,function(x){sum(is.na(x))>0.6*nrow(testing_data)})
+testing_data<-testing_data[,!logical_na]
+```
+
+### 4.Prediction
+
+We will use 2 methods for modelling the datasets and choose the one with highest accuracy as the best fit. The 2 methods are: Decision Tree and Random Forests.
+We will then use a Confusion Matrix to validate our results and then plot it for better visualisation.
+
+#### 4.1 Decision Tree
+
+```{r cache=TRUE,warning=FALSE}
+model_dec_tree <- rpart(classe ~ ., data=training_new, method="class")
+fancyRpartPlot(model_dec_tree)
+```
+
+We will check the accuracy of the decision tree by using a confusion matrix
+```{r cache=TRUE}
+decision_tree_prediction <- predict(model_dec_tree, testing_new, type = "class")
+decisiontree_cm <- confusionMatrix(decision_tree_prediction, testing_new$classe)
+print(decisiontree_cm)
+```
+
+```{r}
+# Plotting the results of confusion matrix
+plot(decisiontree_cm$table, col = decisiontree_cm$byClass, main=paste("Accuracy(Decision Tree) =",round(decisiontree_cm$overall[1],digits = 3)))
+```
+
+#### 4.2 Random Forests
+
+```{r cache=TRUE}
+model_randforest <- randomForest(classe ~. , data=training_new)
+randforest_prediction<- predict(model_randforest, testing_new, type = "class")
+```
+
+Now we will use a confusion matrix to test the accuracy
+
+```{r}
+randforests_cm<-confusionMatrix(randforest_prediction,testing_new$classe)
+randforests_cm
+```
+
+```{r}
+# Plotting the results of confusion matrix
+plot(randforests_cm$table,col=randforests_cm$byClass, main=paste("Accuracy(Random Forests) =",round(randforests_cm$overall[1],digits = 3)))
+```
+
+### 5.Conclusion
+The accuracy of the 2 prediction algorithms are  
+Decision Tree->72.3%   
+Random forests->99.5% 
+
+Since the accuracy for random forests is highest,we will be using it for the quiz.
+```{r cache=TRUE}
+predict_test<-predict(model_randforest,testing_data)
+predict_test
+```
